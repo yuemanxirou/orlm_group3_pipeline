@@ -66,7 +66,3 @@ stage1/
 4. 运行结果填入 `corrected_execution_result`
 5. 如有问题，修改 `wrong_model_names`、`notes` 等其他字段
 6. 运行 `python3 scripts/writeback.py --start 1 --end 50` 产出最终 JSONL
-
-## 切换小组
-
-编辑 `config.py`，修改 `reviewer_group` 和文件路径即可。
