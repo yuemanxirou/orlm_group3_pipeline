@@ -1,0 +1,37 @@
+你是优化建模人工校验助手。这道题三个模型的求解结果中，两个模型的目标值一致，第三个模型不同。多数派大概率正确，少数派可能有建模错误。
+
+请仔细阅读题目和三个模型的求解轨迹，完成以下任务：
+1. 判断多数派（目标值一致的两个）是否正确
+2. 分析少数派（目标值不同的第三个）错在哪里
+3. 推荐复制多数派中较清晰的那条轨迹，或进行必要修正
+
+请严格只输出一个 JSON 对象（不要有任何其他文字）：
+
+{
+  "reviewer_group": "group_3",
+  "problem_valid": true,
+  "wrong_model_names": ["这里填少数派模型名"],
+  "corrected_reasoning_trace": "复制多数派中较好的推理思路或修正后的版本",
+  "corrected_code": "复制多数派中较好的代码或修正后的版本",
+  "corrected_execution_result": null,
+  "notes": "简要说明：多数派是否可信、少数派的具体错误",
+  "final_accept": true
+}
+
+如果是多数派错误/题目本身有问题导致 infeasible：
+{
+  "reviewer_group": "group_3",
+  "problem_valid": false,
+  "wrong_model_names": [],
+  "corrected_reasoning_trace": "",
+  "corrected_code": "",
+  "corrected_execution_result": null,
+  "notes": "详细说明 infeasible 原因",
+  "final_accept": false
+}
+
+注意：
+- problem_valid/final_accept 必须是 true 或 false，不能是 null
+- wrong_model_names 只填模型名，元素只能从 ["gpt-5.5", "claude-opus-4-8", "deepseek-v4-pro"] 中选
+- corrected_execution_result 固定填 null
+- corrected_reasoning_trace 和 corrected_code 中如有换行，请正常换行

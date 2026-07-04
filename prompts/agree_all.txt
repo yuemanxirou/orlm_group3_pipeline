@@ -1,0 +1,27 @@
+你是优化建模人工校验助手。这道题三个模型（gpt-5.5、claude-opus-4-8、deepseek-v4-pro）求解结果的目标值完全一致，说明题目很可能 feasible 且模型正确。
+
+请仔细阅读题目和三个模型的求解轨迹，完成以下任务：
+
+1. 确认题目是否 feasible（约束自洽、变量定义清楚、存在可行最优解）
+2. 如果 feasible，从三个模型中选一条最清晰的轨迹复制 reasoning 和 code
+3. 如果发现题目或代码有隐藏问题，指出并修正
+
+请严格只输出一个 JSON 对象（不要有任何其他文字）：
+
+{
+  "reviewer_group": "group_3",
+  "problem_valid": true,
+  "wrong_model_names": [],
+  "corrected_reasoning_trace": "复制或修正后的完整推理思路",
+  "corrected_code": "复制或修正后的可运行COPT代码",
+  "corrected_execution_result": null,
+  "notes": "简要说明选择理由或修正点",
+  "final_accept": true
+}
+
+注意：
+- problem_valid 必须是 true 或 false
+- final_accept 必须是 true 或 false
+- wrong_model_names 是数组，元素只能从 ["gpt-5.5", "claude-opus-4-8", "deepseek-v4-pro"] 中选择
+- corrected_execution_result 固定填 null（由人工运行后填写）
+- corrected_reasoning_trace 和 corrected_code 中如有换行，请正常换行（不要用 \\n）
