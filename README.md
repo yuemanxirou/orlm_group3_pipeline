@@ -18,7 +18,9 @@ python3 scripts/run_ai_review.py --start 1 --end 50
 #    - corrected_reasoning_trace（纯文本段落）
 #    - corrected_code（```python 代码块）
 #    - review_json（决策字段）
-#    对 feasible 题本地运行 corrected_code，填入 corrected_execution_result
+
+# 4.5 本地运行 corrected_code，填入 corrected_execution_result
+python3 scripts/run_corrected_code.py --batch
 
 # 5. 批量写回
 python3 scripts/replace_human_review.py --batch --start 1 --end 50
@@ -39,6 +41,7 @@ python3 scripts/validate_review_file.py --input output/group_3_reviewed_1_50.jso
 | `ai_review_one.py` | 对已有 .md 文件（重新）调 AI | `--input work/agree_two/v_xxx.md` 或 `--batch work/agree_two` |
 | `extract_review_item.py` | 按 problem_id 抽取单题到 .md | `--problem-id v_xxx` |
 | `replace_human_review.py` | 将人工复核后的 human_review 写回 JSONL | 单题: `--input work/…/v_xxx.md`；批量: `--batch --start 1 --end 50` |
+| `run_corrected_code.py` | 本地运行 .md 中的 corrected_code，填入执行结果 | 单题: `--input work/…/v_xxx.md`；批量: `--batch` |
 | `validate_review_file.py` | 校验 JSONL（字段/类型/完整性） | `--input output/xxx.jsonl --compare group_3.jsonl` |
 
 ## .md 审阅文件格式
@@ -77,8 +80,8 @@ run_ai_review.py --start 1 --end 50
   → work/missing/v_xxx.md
 
 逐题打开 .md，复核 AI 初稿
-  → 检查 reasoning、修正 code
-  → 本地运行 corrected_code，填入 corrected_execution_result
+  → 检查 reasoning、修正 code → 保存
+  → run_corrected_code.py --batch（本地跑码，自动填入结果）
   → 修改 review_json 中的决策字段
 
 replace_human_review.py --batch --start 1 --end 50
@@ -117,6 +120,7 @@ orlm_group3_pipeline/
 │   ├── run_ai_review.py          # 🔰 主入口
 │   ├── ai_review_one.py          # 独立 AI 重跑
 │   ├── extract_review_item.py    # 单题提取
+│   ├── run_corrected_code.py     # 本地跑码，自动填入结果
 │   ├── replace_human_review.py   # 写回 JSONL
 │   └── validate_review_file.py   # 校验 JSONL
 ├── group_3.jsonl             # 原始数据
