@@ -104,7 +104,7 @@ python3 scripts/replace_human_review.py --input work/v_ff0f36fb6000ab.md
 ## 文件结构
 
 ```
-stage1/
+orlm_group3_pipeline/
 ├── .env.example              # API Key 模板
 ├── .env                      # 真实 Key（Git 忽略）
 ├── config.py                 # 集中配置
