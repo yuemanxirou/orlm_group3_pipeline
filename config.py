@@ -5,12 +5,22 @@
 
 import os
 
+# 尝试从 .env 文件加载（本地开发），失败则用环境变量
+_ENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+if os.path.exists(_ENV_PATH):
+    with open(_ENV_PATH) as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if _line and not _line.startswith("#") and "=" in _line:
+                _k, _v = _line.split("=", 1)
+                os.environ.setdefault(_k.strip(), _v.strip())
+
 # ============================================================
 # API 配置
 # ============================================================
 API_CONFIG = {
     "base_url": "https://api.shubiaobiao.cn/v1",
-    "api_key": "sk-oDI4fUOk0Bo4dHB6Ef9c1d78118c4584A2B418C6BdFeF807",
+    "api_key": os.environ.get("API_KEY", ""),
     "model": "gpt-5.4-mini",
     "max_tokens": 4096,
     "temperature": 0.0,

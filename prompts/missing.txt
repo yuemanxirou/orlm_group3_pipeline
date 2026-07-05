@@ -1,25 +1,30 @@
-你是优化建模人工校验助手。这道题至少有一个模型的求解执行失败（状态不是 optimal，或缺少目标值）。
+你是优化建模人工校验助手。只根据下面 JSON 中的 question、auto_reject、model_responses 判断。
 
-请仔细阅读题目和所有模型的求解轨迹，完成以下任务：
-1. 判断失败的模型是什么原因（代码错误、题目建模不可行、或其他）
-2. 评估成功求解的模型是否正确
-3. 如果能从成功模型中找到正确轨迹，复制修正；如果都不对，从头修正
+【本题分类：有模型执行失败或缺失目标值】
+说明：至少一个模型的求解未成功（状态不是 optimal 或缺少目标值）。请重点判断：失败的原因是什么（代码错误/题目不可行）、成功求解的模型是否正确。
 
-请严格只输出一个 JSON 对象（不要有任何其他文字）：
+任务：
+1. 判断题目是否 feasible。
+2. 如果 feasible，找出正确模型或修正一条完整 reasoning + COPT code。
+3. 如果 infeasible 或题目缺关键信息，标注 final_accept=false，并写清 notes。
+4. 不要修改 question、auto_reject、model_responses、review_guidance、provenance。
+5. 只输出 human_review JSON。
+
+请严格只输出一个 JSON 对象。
 
 有正确轨迹时：
 {
   "reviewer_group": "group_3",
   "problem_valid": true,
   "wrong_model_names": ["失败的模型名"],
-  "corrected_reasoning_trace": "正确的完整推理思路",
-  "corrected_code": "正确的可运行COPT代码",
+  "corrected_reasoning_trace": "正确的完整推理",
+  "corrected_code": "正确的可运行代码",
   "corrected_execution_result": null,
-  "notes": "说明哪个模型失败、失败原因、为什么采纳的模型正确",
+  "notes": "说明哪个模型失败、原因、为什么采纳的模型正确",
   "final_accept": true
 }
 
-所有成功模型都错/题目 infeasible 时：
+所有模型都不可用/题目 infeasible 时：
 {
   "reviewer_group": "group_3",
   "problem_valid": false,
@@ -27,12 +32,11 @@
   "corrected_reasoning_trace": "",
   "corrected_code": "",
   "corrected_execution_result": null,
-  "notes": "说明 infeasible 原因或为什么无法修正",
+  "notes": "说明原因",
   "final_accept": false
 }
 
 注意：
-- problem_valid/final_accept 必须是 true 或 false
-- wrong_model_names 元素只能从 ["gpt-5.5", "claude-opus-4-8", "deepseek-v4-pro"] 中选
 - corrected_execution_result 固定填 null
+- wrong_model_names 元素只能从 ["gpt-5.5", "claude-opus-4-8", "deepseek-v4-pro"] 中选
 - corrected_reasoning_trace 和 corrected_code 中如有换行，请正常换行
