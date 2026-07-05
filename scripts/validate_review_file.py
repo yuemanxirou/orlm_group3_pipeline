@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-validate_final.py —— 校验最终 JSONL 文件的格式和一致性
+validate_review_file.py —— 校验最终 JSONL 文件的格式和一致性
 
 用法:
-    python3 scripts/validate_final.py
-    python3 scripts/validate_final.py --input output/group_3_reviewed_1_50.jsonl
-    python3 scripts/validate_final.py --compare group_3.jsonl   # 同时对比原始文件
+    python3 scripts/validate_review_file.py
+    python3 scripts/validate_review_file.py --input output/group_3_reviewed_1_50.jsonl
+    python3 scripts/validate_review_file.py --compare group_3.jsonl
 """
 
 import argparse
