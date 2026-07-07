@@ -35,10 +35,16 @@ def parse_section(content: str, heading: str) -> str:
     if not m:
         return ""
     text = m.group(1).strip()
+    # 过滤占位文本
+    if text.startswith("*("):
+        return ""
     # 如果是代码块，提取 python 代码
     code_m = re.match(r"```(?:python)?\s*\n(.*?)\n```", text, re.DOTALL)
     if code_m:
-        return code_m.group(1).rstrip()
+        code = code_m.group(1).rstrip()
+        if code.startswith("# 在此粘贴") or code.startswith("# 题目不可行"):
+            return ""
+        return code
     return text
 
 
@@ -67,11 +73,11 @@ def build_human_review(content: str) -> dict:
     reasoning = parse_section(content, "corrected_reasoning_trace")
     code = parse_section(content, "corrected_code")
     exec_result = parse_execution_result(parse_section(content, "corrected_execution_result"))
-    if reasoning and "corrected_reasoning_trace" not in hr:
+    if reasoning and ("corrected_reasoning_trace" not in hr or not hr.get("corrected_reasoning_trace")):
         hr["corrected_reasoning_trace"] = reasoning
-    if code and "corrected_code" not in hr:
+    if code and ("corrected_code" not in hr or not hr.get("corrected_code")):
         hr["corrected_code"] = code
-    if exec_result is not None and "corrected_execution_result" not in hr:
+    if exec_result is not None and not hr.get("corrected_execution_result"):
         hr["corrected_execution_result"] = exec_result
     return hr
 
