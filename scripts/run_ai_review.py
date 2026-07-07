@@ -11,11 +11,13 @@ run_ai_review.py —— 数据校对主入口
 """
 
 import argparse
+import concurrent.futures
 import copy
 import json
 import os
 import re
 import sys
+import threading
 import time
 import urllib.request
 import urllib.error
@@ -132,12 +134,22 @@ def build_review_md(record: dict, category: str, line_index: int) -> str:
     lines.append("```")
     lines.append("")
 
-    # human_review (仅短字段，不含 reasoning/code)
-    short_hr = {k: v for k, v in hr.items() if k not in ("corrected_reasoning_trace", "corrected_code")}
+    # corrected_execution_result（独立段落，run_corrected_code.py 自动填入）
+    exec_result = hr.get("corrected_execution_result")
+    lines.append("## corrected_execution_result")
+    lines.append("")
+    if exec_result:
+        lines.append(exec_result)
+    else:
+        lines.append("*(运行 `python3 scripts/run_corrected_code.py --batch` 自动填入)*")
+    lines.append("")
+
+    # human_review (仅短字段，不含 reasoning/code/execution_result)
+    short_hr = {k: v for k, v in hr.items()
+                if k not in ("corrected_reasoning_trace", "corrected_code", "corrected_execution_result")}
     lines.append("## human_review")
     lines.append("")
-    lines.append("> ⚠️ 推理思路和代码已在上方独立段落中编辑。此处只填决策字段。")
-    lines.append("> `corrected_execution_result` 为 null 时需要人工运行代码后填写。")
+    lines.append("> ⚠️ 推理思路、代码和执行结果已在上方独立段落中编辑。此处只填决策字段。")
     lines.append("")
     lines.append("```review_json")
     lines.append(json.dumps(short_hr, indent=2, ensure_ascii=False))
@@ -264,6 +276,7 @@ def main():
     parser.add_argument("--start", type=int, default=1)
     parser.add_argument("--end", type=int, default=None)
     parser.add_argument("--no-ai", action="store_true")
+    parser.add_argument("--workers", type=int, default=5, help="并发 API 调用数（默认 5）")
     args = parser.parse_args()
 
     input_path = PATHS["input_jsonl"]
@@ -301,43 +314,75 @@ def main():
     print(f"   {'合计':15s}   {count - parse_fail} 条（解析失败 {parse_fail}）")
     print("━" * 50)
 
-    # AI 填充
+    # AI 填充（并行）
     if not args.no_ai:
-        ai_ok = ai_fail = 0
-        for cat in ["agree_all", "agree_two", "disagree_all", "missing"]:
-            items = buckets[cat]
-            if not items:
-                continue
-            prompt = load_prompt(cat)
-            print(f"\n🤖 [{CONSISTENCY_LABELS[cat]}] {len(items)} 条")
-            for idx, (rec, i) in enumerate(items):
-                pid = rec["problem_id"]
-                try:
-                    user_msg = build_ai_message(rec, cat)
-                    hr = parse_ai_json(call_ai(prompt, user_msg))
-                    hr = sanitize_human_review(hr, pid)[1] if False else hr
-                    sanitize_human_review(hr, pid)
-                    rec["_ai_hr"] = hr  # 暂存
-                    ai_ok += 1
-                    print(f"   [{idx + 1}/{len(items)}] {pid} ✅")
-                except Exception as e:
-                    ai_fail += 1
-                    print(f"   [{idx + 1}/{len(items)}] {pid} ❌ {e}")
-        print(f"\n🤖 完成: {ai_ok}/{ai_ok + ai_fail} 成功, {ai_fail} 失败")
+        print_lock = threading.Lock()
+        ai_ok = 0
+        ai_fail = 0
+        total_items = sum(len(v) for v in buckets.values())
 
-    # 写入 .md 文件
-    for cat in ["agree_all", "agree_two", "disagree_all", "missing"]:
-        cat_dir = os.path.join(work_dir, cat)
-        os.makedirs(cat_dir, exist_ok=True)
-        for rec, i in buckets[cat]:
+        def write_one_md(cat: str, rec: dict, line_idx: int):
+            """即时写入单条 .md 文件"""
+            cat_dir = os.path.join(work_dir, cat)
+            os.makedirs(cat_dir, exist_ok=True)
             pid = rec["problem_id"]
-            # 如果 AI 填充了 human_review，替换默认值
-            if "_ai_hr" in rec:
-                rec["human_review"] = rec.pop("_ai_hr")
-            md = build_review_md(rec, cat, i)
+            md = build_review_md(rec, cat, line_idx)
             filepath = os.path.join(cat_dir, f"{pid}.md")
             with open(filepath, "w", encoding="utf-8") as f:
                 f.write(md)
+
+        def process_one(cat: str, rec: dict, idx: int, total: int, line_idx: int):
+            """处理单条数据 + 即时写入 .md 文件"""
+            nonlocal ai_ok, ai_fail
+            pid = rec["problem_id"]
+            try:
+                user_msg = build_ai_message(rec, cat)
+                hr = parse_ai_json(call_ai(prompt_cache[cat], user_msg))
+                sanitize_human_review(hr, pid)
+                rec["human_review"] = hr
+                with print_lock:
+                    ai_ok += 1
+                    print(f"   [{ai_ok + ai_fail}/{total_items}] {pid} ✅")
+            except Exception as e:
+                with print_lock:
+                    ai_fail += 1
+                    print(f"   [{ai_ok + ai_fail}/{total_items}] {pid} ❌ {e}")
+            # 无论成功与否，即时写入 .md（避免中断丢进度）
+            write_one_md(cat, rec, line_idx)
+
+        # 预加载所有 prompt
+        prompt_cache = {}
+        for cat in ["agree_all", "agree_two", "disagree_all", "missing"]:
+            prompt_cache[cat] = load_prompt(cat)
+
+        # 构建所有任务列表（按分类顺序，保持全局进度可读）
+        tasks = []
+        for cat in ["agree_all", "agree_two", "disagree_all", "missing"]:
+            for rec, i in buckets[cat]:
+                tasks.append((cat, rec, i))
+
+        print(f"\n🤖 并行调用 AI（{args.workers} workers × {len(tasks)} 条）\n")
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
+            futures = [
+                executor.submit(process_one, cat, rec, idx, len(tasks), i)
+                for idx, (cat, rec, i) in enumerate(tasks)
+            ]
+            concurrent.futures.wait(futures)
+
+        print(f"\n🤖 完成: {ai_ok}/{len(tasks)} 成功, {ai_fail} 失败")
+
+    # --no-ai 模式：直接写入 .md（无 AI 填充）
+    if args.no_ai:
+        for cat in ["agree_all", "agree_two", "disagree_all", "missing"]:
+            cat_dir = os.path.join(work_dir, cat)
+            os.makedirs(cat_dir, exist_ok=True)
+            for rec, i in buckets[cat]:
+                pid = rec["problem_id"]
+                md = build_review_md(rec, cat, i)
+                filepath = os.path.join(cat_dir, f"{pid}.md")
+                with open(filepath, "w", encoding="utf-8") as f:
+                    f.write(md)
 
     # 打印输出
     print()

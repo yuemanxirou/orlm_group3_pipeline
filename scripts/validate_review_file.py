@@ -29,15 +29,15 @@ def validate(input_path: str, original_path: str = None) -> tuple:
     }
 
     # 加载原始文件对比
-    original_records = None
+    original_records = {}
     if original_path and os.path.exists(original_path):
         with open(original_path, "r", encoding="utf-8") as f:
-            original_records = []
             for line in f:
                 try:
-                    original_records.append(json.loads(line))
+                    rec = json.loads(line)
+                    original_records[rec.get("problem_id")] = rec
                 except json.JSONDecodeError:
-                    original_records.append(None)
+                    pass
 
     if not os.path.exists(input_path):
         return [f"文件不存在: {input_path}"], [], stats
@@ -49,8 +49,8 @@ def validate(input_path: str, original_path: str = None) -> tuple:
     expected = REVIEW_CONFIG["expected_line_count"]
     valid_names = REVIEW_CONFIG["valid_solver_names"]
 
-    if len(lines) != expected:
-        errors.append(f"行数不匹配: 期望 {expected}，实际 {len(lines)}")
+    if len(lines) < expected:
+        warnings.append(f"输出行数 {len(lines)} < 原始行数 {expected}（可能只输出部分行）")
 
     for i, line in enumerate(lines):
         try:
@@ -115,8 +115,8 @@ def validate(input_path: str, original_path: str = None) -> tuple:
             errors.append(f"{pid}: reviewer_group 应为 '{REVIEW_CONFIG['reviewer_group']}'")
 
         # 完整性对比
-        if original_records and i < len(original_records) and original_records[i] is not None:
-            orig = original_records[i]
+        if original_records and pid in original_records:
+            orig = original_records[pid]
             for key in rec:
                 if key == "human_review":
                     continue

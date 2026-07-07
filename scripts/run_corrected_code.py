@@ -31,6 +31,15 @@ def extract_code(content: str) -> str:
     return code
 
 
+def extract_section(content: str, heading: str) -> str:
+    """提取 ## heading 之后到下一个 ## 或 --- 之前的内容。"""
+    pattern = rf"## {heading}\s*\n\n?(.*?)(?=\n## |\n---|\Z)"
+    m = re.search(pattern, content, re.DOTALL)
+    if not m:
+        return ""
+    return m.group(1).strip()
+
+
 def extract_review_json(content: str) -> dict:
     """提取 review_json 代码块。"""
     m = re.search(r"```review_json\s*\n(.*?)\n```", content, re.DOTALL)
@@ -45,9 +54,9 @@ def extract_review_json(content: str) -> dict:
 def run_python_code(code: str, timeout_sec: int = 30) -> dict:
     """
     在子进程中执行 Python 代码。
-    返回 {"success": bool, "stdout": str, "stderr": str, "elapsed_ms": int}
+    返回 {"success": bool, "stdout": str, "stderr": str, "elapsed_ms": int, "result_json": dict|None}
     """
-    result = {"success": False, "stdout": "", "stderr": "", "elapsed_ms": 0}
+    result = {"success": False, "stdout": "", "stderr": "", "elapsed_ms": 0, "result_json": None}
     start = time.time()
     try:
         proc = subprocess.run(
@@ -72,11 +81,23 @@ def run_python_code(code: str, timeout_sec: int = 30) -> dict:
     return result
 
 
+def parse_result_json(stdout: str) -> dict | None:
+    """从 stdout 中提取 RESULT_JSON: 后面的 JSON object。"""
+    m = re.search(r"RESULT_JSON:\s*(\{.*\})", stdout, re.DOTALL)
+    if not m:
+        return None
+    try:
+        return json.loads(m.group(1))
+    except json.JSONDecodeError:
+        return None
+
+
 def format_execution_result(run_result: dict) -> str:
-    """将运行结果格式化为 readable string。"""
-    parts = []
-    parts.append(f"// exit: {'ok' if run_result['success'] else 'error'}  |  time: {run_result['elapsed_ms']}ms")
-    if run_result["stdout"]:
+    """将运行结果格式化为 .md 段落内容：注释头 + 可解析的 JSON。"""
+    parts = [f"// exit: {'ok' if run_result['success'] else 'error'}  |  time: {run_result['elapsed_ms']}ms"]
+    if run_result["result_json"]:
+        parts.append(json.dumps(run_result["result_json"], indent=2, ensure_ascii=False))
+    elif run_result["stdout"]:
         parts.append(run_result["stdout"])
     if run_result["stderr"]:
         parts.append(f"// stderr:\n{run_result['stderr']}")
@@ -84,21 +105,25 @@ def format_execution_result(run_result: dict) -> str:
 
 
 def update_md_file(filepath: str, execution_result: str) -> bool:
-    """将 corrected_execution_result 写回 .md 文件。"""
+    """将 corrected_execution_result 写回 .md 文件的独立段落。"""
     with open(filepath, "r", encoding="utf-8") as f:
         content = f.read()
 
-    review_json = extract_review_json(content)
-    old_result = review_json.get("corrected_execution_result", None)
-    review_json["corrected_execution_result"] = execution_result
-
-    new_json_str = json.dumps(review_json, indent=2, ensure_ascii=False)
-    old_block = re.search(r"```review_json\s*\n.*?\n```", content, re.DOTALL)
-    if not old_block:
-        return False
-
-    new_block = f"```review_json\n{new_json_str}\n```"
-    new_content = content[:old_block.start()] + new_block + content[old_block.end():]
+    # 查找已有段落并替换内容
+    section_pattern = r"(## corrected_execution_result\s*\n)\n?(.*?)(?=\n## |\n---|\Z)"
+    m = re.search(section_pattern, content, re.DOTALL)
+    if not m:
+        # 段落不存在，插入在 corrected_code 之后
+        insert_after = r"(## corrected_code\s*\n\n?```(?:python)?\s*\n.*?\n```\s*\n)"
+        m2 = re.search(insert_after, content, re.DOTALL)
+        if not m2:
+            return False
+        insert_pos = m2.end()
+        new_section = f"\n## corrected_execution_result\n\n{execution_result}\n"
+        new_content = content[:insert_pos] + new_section + content[insert_pos:]
+    else:
+        new_section = f"{m.group(1)}\n{execution_result}"
+        new_content = content[:m.start()] + new_section + content[m.end():]
 
     with open(filepath, "w", encoding="utf-8") as f:
         f.write(new_content)
@@ -121,9 +146,8 @@ def process_single(filepath: str, timeout_sec: int = 30, dry_run: bool = False) 
         print(f"⚠️  [{pid}] 未找到 corrected_code（可能尚未填写）")
         return False
 
-    review_json = extract_review_json(content)
-    old_result = review_json.get("corrected_execution_result", None)
-    if old_result and old_result is not None and str(old_result).strip():
+    old_result = extract_section(content, "corrected_execution_result")
+    if old_result and not old_result.startswith("*("):
         print(f"⚠️  [{pid}] corrected_execution_result 已有值，跳过（如需重跑请先清空）")
         return False
 
@@ -134,10 +158,13 @@ def process_single(filepath: str, timeout_sec: int = 30, dry_run: bool = False) 
         return False
 
     run_result = run_python_code(code, timeout_sec=timeout_sec)
+    if run_result["success"]:
+        run_result["result_json"] = parse_result_json(run_result["stdout"])
     result_str = format_execution_result(run_result)
 
     status = "✅" if run_result["success"] else "⚠️"
-    print(f"{status} {run_result['elapsed_ms']}ms")
+    json_ok = "📋" if run_result["result_json"] else ""
+    print(f"{status}{json_ok} {run_result['elapsed_ms']}ms")
 
     if run_result["stdout"]:
         print(f"   stdout: {run_result['stdout'][:120]}")

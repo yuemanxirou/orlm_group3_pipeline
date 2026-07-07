@@ -42,15 +42,37 @@ def parse_section(content: str, heading: str) -> str:
     return text
 
 
+def parse_execution_result(text: str):
+    """将 ## corrected_execution_result 段落解析为 JSON object 或 null。"""
+    if not text or text.startswith("*("):
+        return None
+    # 尝试直接解析（纯 JSON）
+    try:
+        return json.loads(text)
+    except (json.JSONDecodeError, TypeError):
+        pass
+    # 去掉 // 注释行后再试
+    cleaned = "\n".join(line for line in text.split("\n") if not line.strip().startswith("//"))
+    try:
+        return json.loads(cleaned)
+    except (json.JSONDecodeError, TypeError):
+        pass
+    # 解析失败，返回原文本
+    return text
+
+
 def build_human_review(content: str) -> dict:
     """从 .md 中组装完整 human_review。"""
     hr = parse_review_json(content) or {}
     reasoning = parse_section(content, "corrected_reasoning_trace")
     code = parse_section(content, "corrected_code")
-    if reasoning and not hr.get("corrected_reasoning_trace"):
+    exec_result = parse_execution_result(parse_section(content, "corrected_execution_result"))
+    if reasoning and "corrected_reasoning_trace" not in hr:
         hr["corrected_reasoning_trace"] = reasoning
-    if code and not hr.get("corrected_code"):
+    if code and "corrected_code" not in hr:
         hr["corrected_code"] = code
+    if exec_result is not None and "corrected_execution_result" not in hr:
+        hr["corrected_execution_result"] = exec_result
     return hr
 
 
@@ -141,10 +163,13 @@ def main():
     e = args.end if args.end else total
     output_path = os.path.join(output_dir, f"group_3_reviewed_{s}_{e}.jsonl")
 
+    start_idx = s - 1
+    end_idx = e
     with open(output_path, "w", encoding="utf-8") as f:
-        f.writelines(lines)
+        f.writelines(lines[start_idx:end_idx])
 
-    print(f"📄 已写回 {updated} 条 → {output_path}")
+    actual = end_idx - start_idx
+    print(f"📄 已写回 {updated} 条 → {output_path}（共 {actual} 行）")
     print(f"🔜 校验: python3 scripts/validate_review_file.py --input {output_path}")
 
 
