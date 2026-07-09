@@ -67,6 +67,30 @@ def parse_execution_result(text: str):
     return text
 
 
+HR_FIELD_ORDER = [
+    "reviewer_group",
+    "problem_valid",
+    "wrong_model_names",
+    "corrected_reasoning_trace",
+    "corrected_code",
+    "corrected_execution_result",
+    "notes",
+    "final_accept",
+]
+
+
+def reorder_hr(hr: dict) -> dict:
+    """按标准字段顺序重排 human_review dict。"""
+    ordered = {}
+    for k in HR_FIELD_ORDER:
+        if k in hr:
+            ordered[k] = hr[k]
+    for k in hr:
+        if k not in ordered:
+            ordered[k] = hr[k]
+    return ordered
+
+
 def build_human_review(content: str) -> dict:
     """从 .md 中组装完整 human_review。"""
     hr = parse_review_json(content) or {}
@@ -79,7 +103,7 @@ def build_human_review(content: str) -> dict:
         hr["corrected_code"] = code
     if exec_result is not None and not hr.get("corrected_execution_result"):
         hr["corrected_execution_result"] = exec_result
-    return hr
+    return reorder_hr(hr)
 
 
 def collect_from_workdir(work_dir: str) -> dict:
